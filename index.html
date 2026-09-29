@@ -1,19 +1,15 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aset Gambar Saya</title>
-    <!-- Tailwind CSS untuk Desain -->
+    <title>Aset Gambar & Video Saya</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Cloudinary Upload Widget -->
     <script src="https://widget.cloudinary.com/v2.0/global/all.js" type="text/javascript"></script>
-    <!-- SweetAlert untuk Pop-up Cantik -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans pb-10">
 
-    <!-- Header (Navigasi) -->
     <header class="bg-white shadow-sm p-4 sticky top-0 z-10 flex justify-between items-center">
         <h1 class="text-xl font-bold text-indigo-600">My CDN</h1>
         <button id="upload_widget" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all">
@@ -21,68 +17,51 @@
         </button>
     </header>
 
-    <!-- Galeri -->
     <main class="p-4">
-        <div id="loading" class="text-center text-gray-500 my-10 hidden">Memuat gambar...</div>
-        <!-- Grid 2 kolom di HP, 4 kolom di layar lebar -->
+        <div id="loading" class="text-center text-gray-500 my-10 hidden">Memuat aset...</div>
         <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <!-- Gambar akan muncul otomatis di sini -->
+            <!-- Aset akan muncul otomatis di sini -->
         </div>
     </main>
 
-    <!-- Logika Aplikasi (Javascript) -->
     <script type="module">
-        // Import Firebase v10
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
 
-        // ==========================================
-        // TUGAS 1: GANTI KONFIGURASI FIREBASE DI BAWAH INI
-        // (Salin dari Firebase Console Langkah 2)
-        // ==========================================
+        // Konfigurasi Kunci Anda
         const firebaseConfig = {
-  apiKey: "AIzaSyCjjhzACEAURiDyo6AJlkmU-rv55qDsggM",
-  authDomain: "aset-gambar.firebaseapp.com",
-  projectId: "aset-gambar",
-  storageBucket: "aset-gambar.firebasestorage.app",
-  messagingSenderId: "354919273298",
-  appId: "1:354919273298:web:bcb880580a10e43990a08b"
-};
+          apiKey: "AIzaSyCjjhzACEAURiDyo6AJlkmU-rv55qDsggM",
+          authDomain: "aset-gambar.firebaseapp.com",
+          projectId: "aset-gambar",
+          storageBucket: "aset-gambar.firebasestorage.app",
+          messagingSenderId: "354919273298",
+          appId: "1:354919273298:web:bcb880580a10e43990a08b"
+        };
 
-        // ==========================================
-        // TUGAS 2: GANTI KONFIGURASI CLOUDINARY DI BAWAH INI
-        // (Salin dari Dashboard Cloudinary Langkah 1)
-        // ==========================================
         const CLOUD_NAME = "bzkdh6h1";
         const UPLOAD_PRESET = "Hamdan-aset";
 
-
-        // --- ANDA TIDAK PERLU MENGUBAH KODE DI BAWAH INI ---
-
-        // Menghubungkan ke Firebase
         let app, db;
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
         } catch(e) {
-            console.error("Menunggu Anda memasukkan kunci Firebase...");
+            console.error("Gagal menghubungkan ke Firebase", e);
         }
 
         const gallery = document.getElementById('gallery');
         const loading = document.getElementById('loading');
 
-        // Fungsi Memuat Gambar dari Database
         async function loadImages() {
             if(!db) return;
             loading.classList.remove('hidden');
-            gallery.innerHTML = ''; // Kosongkan galeri sebelum dimuat ulang
+            gallery.innerHTML = ''; 
             try {
-                // Tarik data, urutkan dari yang terbaru
                 const q = query(collection(db, "images"), orderBy("createdAt", "desc"));
                 const querySnapshot = await getDocs(q);
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    renderCard(data.url, data.tag);
+                querySnapshot.forEach((document) => {
+                    const data = document.data();
+                    renderCard(data.url, data.tag, document.id);
                 });
             } catch (e) {
                 console.error("Gagal memuat dari Firebase:", e);
@@ -90,18 +69,31 @@
             loading.classList.add('hidden');
         }
 
-        // Fungsi Menampilkan Kartu Gambar
-        function renderCard(url, tag) {
+        function renderCard(url, tag, docId) {
             const card = document.createElement('div');
-            card.className = "bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col";
+            card.className = "bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 flex flex-col relative";
+            
+            // Deteksi apakah URL ini adalah video (Cloudinary menyimpan video dengan rute /video/upload/)
+            const isVideo = url.includes('/video/upload/');
+            const mediaHtml = isVideo 
+                ? `<video src="${url}" class="w-full h-full object-cover bg-black" controls muted playsinline></video>`
+                : `<img src="${url}" class="w-full h-full object-cover" alt="${tag}">`;
+
             card.innerHTML = `
-                <div class="h-32 bg-gray-200 overflow-hidden relative">
-                    <img src="${url}" class="w-full h-full object-cover" alt="${tag}">
+                <div class="h-32 bg-gray-200 overflow-hidden relative group">
+                    ${mediaHtml}
+                    <button onclick="hapusGambar('${docId}')" 
+                            class="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow opacity-90 transition z-10">
+                        ✕
+                    </button>
                 </div>
                 <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
-                    <p class="text-xs font-medium text-gray-500 truncate">${tag || 'Tanpa tag'}</p>
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-medium text-gray-500 truncate pr-1">${tag || 'Tanpa tag'}</p>
+                        ${isVideo ? `<span class="text-[10px] font-bold bg-blue-100 text-blue-600 px-1.5 rounded">VID</span>` : ''}
+                    </div>
                     <button onclick="salinURL('${url}')"
-                            class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold py-1.5 rounded transition active:scale-95">
+                            class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold py-1.5 rounded transition active:scale-95">
                         Copy Link
                     </button>
                 </div>
@@ -109,13 +101,43 @@
             gallery.appendChild(card);
         }
 
-        // Fungsi Salin URL agar bisa diakses HTML/tombol
+        window.hapusGambar = async function(docId) {
+            const konfirmasi = await Swal.fire({
+                title: 'Hapus dari galeri?',
+                text: "Data akan dihapus dari aplikasi. File asli di CDN tetap aman untuk web yang sedang menggunakannya.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#9ca3af',
+                confirmButtonText: 'Ya, Sembunyikan!',
+                cancelButtonText: 'Batal'
+            });
+
+            if (konfirmasi.isConfirmed) {
+                try {
+                    await deleteDoc(doc(db, "images", docId));
+                    Swal.fire({
+                        icon: 'success', 
+                        title: 'Dihapus', 
+                        toast: true, 
+                        position: 'top-end', 
+                        timer: 2000, 
+                        showConfirmButton: false
+                    });
+                    loadImages(); 
+                } catch (e) {
+                    Swal.fire('Error', 'Gagal menghapus aset', 'error');
+                    console.error(e);
+                }
+            }
+        }
+
         window.salinURL = function(url) {
             navigator.clipboard.writeText(url).then(() => {
                 Swal.fire({
                     icon: 'success', 
                     title: 'Tersalin!', 
-                    text: 'Link gambar siap ditempel di web Anda',
+                    text: 'Link (f_auto, q_auto) siap digunakan.',
                     toast: true, 
                     position: 'top-end', 
                     timer: 2000, 
@@ -124,26 +146,27 @@
             });
         }
 
-        // Konfigurasi Cloudinary Widget
         var myWidget = cloudinary.createUploadWidget({
             cloudName: CLOUD_NAME,
             uploadPreset: UPLOAD_PRESET,
-            sources: ['local', 'camera', 'url'], // Bisa dari galeri HP atau kamera
-            multiple: false
+            sources: ['local', 'camera', 'url'], 
+            multiple: false,
+            // Bebaskan batas agar menerima video & webp
+            clientAllowedFormats: ["png", "jpeg", "jpg", "webp", "gif", "mp4", "webm", "mov"] 
         }, async (error, result) => {
             if (!error && result && result.event === "success") {
-                const imgUrl = result.info.secure_url;
+                // Modifikasi URL untuk menyuntikkan optimasi f_auto,q_auto
+                let imgUrl = result.info.secure_url;
+                imgUrl = imgUrl.replace('/upload/', '/upload/f_auto,q_auto/');
                 
-                // Minta nama tag ke user
                 const { value: tag } = await Swal.fire({
-                    title: 'Beri Nama/Tag Gambar',
+                    title: 'Beri Nama/Tag',
                     input: 'text',
-                    inputPlaceholder: 'contoh: icon-home, hero-banner...',
+                    inputPlaceholder: 'contoh: video-promo, icon-home...',
                     showCancelButton: false,
                     confirmButtonText: 'Simpan'
                 });
 
-                // Simpan data ke Firebase
                 if(db) {
                     try {
                         await addDoc(collection(db, "images"), {
@@ -154,23 +177,23 @@
                         Swal.fire({
                             icon: 'success',
                             title: 'Berhasil!',
-                            text: 'Gambar tersimpan di CDN.'
+                            text: 'Aset tersimpan dengan optimasi auto.',
+                            timer: 2000,
+                            showConfirmButton: false
                         });
-                        loadImages(); // Refresh galeri otomatis
+                        loadImages(); 
                     } catch(e) {
-                        Swal.fire('Error', 'Gagal menyimpan ke database Firebase. Pastikan Test Mode aktif.', 'error');
+                        Swal.fire('Error', 'Gagal menyimpan ke database.', 'error');
                         console.error(e);
                     }
                 }
             }
         });
 
-        // Event Tombol Upload
         document.getElementById("upload_widget").addEventListener("click", function(){
             myWidget.open();
         }, false);
 
-        // Muat gambar saat aplikasi dibuka
         loadImages();
     </script>
 </body>
